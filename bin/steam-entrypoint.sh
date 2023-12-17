@@ -9,6 +9,10 @@ if [[ "$(whoami)" != "${STEAM_USER}" ]]; then
   exit 1
 fi
 
+[ -p /tmp/ARK_FIFO ] && rm /tmp/ARK_FIFO
+mkfifo /tmp/ARK_FIFO
+
+
 function may_update() {
   if [[ "${UPDATE_ON_START}" != "true" ]]; then
     return
@@ -39,6 +43,21 @@ function copy_missing_file() {
     cp -a "${SOURCE}" "${DESTINATION}"
     echo "...successfully copied ${SOURCE} to ${DESTINATION}"
   fi
+}
+
+function stop_ark() {
+  if [[ "${BACKUP_ON_STOP}" == "true" ]] && [ "$(ls -A server/ShooterGame/Saved/SavedArks)" ]; then
+    echo "[Backup on stop]"
+    ${ARKMANAGER} backup
+  fi
+
+  if [[ "${WARN_ON_STOP}" == "true" ]];then
+    ${ARKMANAGER} stop --warn
+  else
+    ${ARKMANAGER} stop
+  fi
+
+  exit
 }
 
 args=("$*")
@@ -112,4 +131,12 @@ fi
 
 may_update
 
-exec "${ARKMANAGER}" run --verbose ${args[@]}
+"${ARKMANAGER}" start --verbose --noautoupdate ${args[@]}
+
+# Stop server in case of signal INT or TERM
+echo "Waiting..."
+trap stop_ark INT
+trap stop_ark TERM
+
+read < /tmp/ARK_FIFO &
+wait
